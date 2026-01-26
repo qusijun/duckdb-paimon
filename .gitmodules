@@ -9,8 +9,8 @@
 
 [submodule "submodules/paimon-cpp"]
 	path = submodules/paimon-cpp
-	url = git@github.com:alibaba/paimon-cpp.git
+	url = https://github.com/alibaba/paimon-cpp.git
 [submodule "submodules/arrow"]
 	path = submodules/arrow
-	url = git@github.com:apache/arrow.git
+	url = https://github.com/apache/arrow.git
 	branch = release-22.0.0-rc1
