@@ -5,7 +5,7 @@ EXT_NAME=paimon
 EXT_CONFIG=${PROJ_DIR}extension_config.cmake
 
 # Pre-build paimon-cpp and arrow-cpp before building the extension
-.PHONY: prebuild-paimon-cpp prebuild-arrow-cpp debug release
+.PHONY: prebuild-paimon-cpp prebuild-arrow-cpp
 
 prebuild-paimon-cpp:
 	@echo "Building paimon-cpp and its dependencies..."
@@ -37,13 +37,20 @@ prebuild-arrow-cpp:
 	@$(MAKE) -C submodules/arrow/cpp/build install
 	@echo "arrow-cpp build and install completed."
 
+
+include extension-ci-tools/makefiles/duckdb_extension.Makefile
+
 debug: prebuild-paimon-cpp prebuild-arrow-cpp
 	@echo "Building extension in debug mode..."
-	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile debug
+	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile debug PROJ_DIR="$(CURDIR)/" EXT_CONFIG="$(PROJ_DIR)extension_config.cmake" EXT_NAME="$(EXT_NAME)"
 
 release: prebuild-paimon-cpp prebuild-arrow-cpp
 	@echo "Building extension in release mode..."
-	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile release
+	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile release PROJ_DIR="$(CURDIR)/" EXT_CONFIG="$(PROJ_DIR)extension_config.cmake" EXT_NAME="$(EXT_NAME)"
 
-# Include the Makefile from extension-ci-tools
-include extension-ci-tools/makefiles/duckdb_extension.Makefile
+ifneq ($(EXTENSION_SQL_TEST_PATTERN),)
+test_release_internal:
+	./build/release/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"
+test_debug_internal:
+	./build/debug/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"
+endif

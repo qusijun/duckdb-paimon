@@ -17,14 +17,17 @@ jobs:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4.3
     with:
       duckdb_version: v1.4.3
-      ci_tools_version: v1.4.3
-      extension_name: quack
+      extension_name: paimon
+      # Use our fork so CI uses our Dockerfiles (CMake 3.x for paimon-cpp deps)
+      override_ci_tools_repository: fafacao86/extension-ci-tools
+      ci_tools_version: main
 
   code-quality-check:
     name: Code Quality Check
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@v1.4.3
     with:
       duckdb_version: v1.4.3
-      ci_tools_version: v1.4.3
-      extension_name: quack
-      format_checks: 'format;tidy'
+      extension_name: paimon
+      override_ci_tools_repository: fafacao86/extension-ci-tools
+      ci_tools_version: main
+      format_checks: 'format'

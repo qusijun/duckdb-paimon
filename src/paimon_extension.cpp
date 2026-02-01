@@ -28,12 +28,13 @@ inline void PaimonOpenSSLVersionScalarFun(DataChunk &args, ExpressionState &stat
 
 static void LoadInternal(ExtensionLoader &loader) {
 	// Register a scalar function
-	auto paimon_scalar_function = ScalarFunction("paimon", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PaimonScalarFun);
+	auto paimon_scalar_function =
+	    ScalarFunction("paimon", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PaimonScalarFun);
 	loader.RegisterFunction(paimon_scalar_function);
 
 	// Register another scalar function
 	auto paimon_openssl_version_scalar_function = ScalarFunction("paimon_openssl_version", {LogicalType::VARCHAR},
-	                                                            LogicalType::VARCHAR, PaimonOpenSSLVersionScalarFun);
+	                                                             LogicalType::VARCHAR, PaimonOpenSSLVersionScalarFun);
 	loader.RegisterFunction(paimon_openssl_version_scalar_function);
 }
 
