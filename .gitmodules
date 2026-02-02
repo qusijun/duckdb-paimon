@@ -4,9 +4,8 @@
 	branch = main
 [submodule "extension-ci-tools"]
 	path = extension-ci-tools
-	url = https://github.com/duckdb/extension-ci-tools
+	url = https://github.com/fafacao86/extension-ci-tools.git
 	branch = main
-
 [submodule "submodules/paimon-cpp"]
 	path = submodules/paimon-cpp
 	url = https://github.com/alibaba/paimon-cpp.git

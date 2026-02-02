@@ -1,0 +1,15 @@
+# name: test/sql/paimon.test
+# description: test paimon extension (load and basic sanity)
+# group: [sql]
+
+require paimon
+
+# Extension loads successfully
+statement ok
+LOAD paimon;
+
+# Basic sanity: extension loaded
+query I
+SELECT 1;
+----
+1
