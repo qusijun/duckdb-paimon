@@ -1,0 +1,21 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "word",
+    "type" : "STRING NOT NULL"
+  }, {
+    "id" : 1,
+    "name" : "cnt",
+    "type" : "BIGINT"
+  } ],
+  "highestFieldId" : 1,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ "word" ],
+  "options" : {
+    "bucket" : "2"
+  },
+  "comment" : "",
+  "timeMillis" : 1769483799009
+}

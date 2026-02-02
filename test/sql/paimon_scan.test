@@ -1,0 +1,29 @@
+# name: test/sql/paimon_scan.test
+# description: test Paimon via ATTACH + SELECT FROM catalog.schema.table (no paimon_scan)
+# group: [sql]
+
+require paimon
+
+# Attach warehouse root; schema "default" comes from default.db
+statement ok
+ATTACH 'test/data' AS pc (TYPE paimon);
+
+# Scan table via catalog (schema from LoadTableSchema, not from first batch)
+query II
+SELECT * FROM pc.default.word_count ORDER BY 1, 2;
+----
+0	1
+1	1
+2	2
+3	1
+4	1
+5	2
+7	1
+9	1
+c	1
+d	1
+f	1
+flink	3
+hello	1
+paimon	4
+world	2

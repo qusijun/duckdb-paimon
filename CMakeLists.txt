@@ -23,15 +23,30 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-include_directories(src/include)
-set(EXTENSION_SOURCES src/paimon_extension.cpp)
+# Include dir for extension headers (e.g. storage/paimon_catalog.hpp)
+# Both global and target-specific so Clangd/compile_commands get the path
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/include)
+set(EXTENSION_SOURCES
+  src/paimon_extension.cpp
+  src/paimon_functions.cpp
+  src/paimon_storage_extension.cpp
+  src/storage/paimon_catalog.cpp
+  src/storage/paimon_catalog_factory.cpp
+  src/storage/paimon_schema_entry.cpp
+  src/storage/paimon_table_entry.cpp
+  src/storage/paimon_transaction.cpp
+  src/storage/paimon_transaction_manager.cpp
+)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
+target_include_directories(${EXTENSION_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/include)
+target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/include)
+
 # Link OpenSSL in both the static library as the loadable extension
-target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared paimon_parquet_file_format_shared)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared paimon_parquet_file_format_shared)
+target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared paimon_parquet_file_format_shared paimon_orc_file_format_shared paimon_avro_file_format_shared paimon_local_file_system_shared)
+target_link_libraries(${LOADABLE_EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared paimon_parquet_file_format_shared paimon_orc_file_format_shared paimon_avro_file_format_shared paimon_local_file_system_shared)
 
 install(
   TARGETS ${EXTENSION_NAME}

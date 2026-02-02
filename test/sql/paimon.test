@@ -1,15 +1,23 @@
 # name: test/sql/paimon.test
-# description: test paimon extension (load and basic sanity)
+# description: test paimon extension
 # group: [sql]
 
+# Before we load the extension, this will fail
+statement error
+SELECT paimon('Sam');
+----
+Catalog Error: Scalar Function with name paimon does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
 require paimon
 
-# Extension loads successfully
-statement ok
-LOAD paimon;
-
-# Basic sanity: extension loaded
+# Confirm the extension works
 query I
-SELECT 1;
+SELECT paimon('Sam');
 ----
-1
+Paimon Sam 🐬
+
+query I
+SELECT paimon_openssl_version('Michael') ILIKE 'Paimon Michael, my linked OpenSSL version is OpenSSL%';
+----
+true

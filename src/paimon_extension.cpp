@@ -1,9 +1,14 @@
 #define DUCKDB_EXTENSION_MAIN
 
+#include "arrow/status.h"
 #include "paimon_extension.hpp"
+#include "paimon_functions.hpp"
+#include "storage/paimon_catalog.hpp"
+#include "storage/paimon_transaction_manager.hpp"
 #include "duckdb.hpp"
-#include "duckdb/common/exception.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/main/config.hpp"
+#include "duckdb/storage/storage_extension.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 // OpenSSL linked through vcpkg
@@ -11,10 +16,25 @@
 
 namespace duckdb {
 
+static unique_ptr<TransactionManager> CreatePaimonTransactionManagerFn(optional_ptr<StorageExtensionInfo> storage_info,
+                                                                       AttachedDatabase &db, Catalog &catalog) {
+	(void)storage_info;
+	auto &paimon_catalog = catalog.Cast<PaimonCatalog>();
+	return make_uniq<PaimonTransactionManager>(db, paimon_catalog);
+}
+
+class PaimonStorageExtension : public StorageExtension {
+public:
+	PaimonStorageExtension() {
+		attach = PaimonCatalog::Attach;
+		create_transaction_manager = CreatePaimonTransactionManagerFn;
+	}
+};
+
 inline void PaimonScalarFun(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &name_vector = args.data[0];
 	UnaryExecutor::Execute<string_t, string_t>(name_vector, result, args.size(), [&](string_t name) {
-		return StringVector::AddString(result, "Paimon " + name.GetString() + " 🐥");
+		return StringVector::AddString(result, "Paimon " + name.GetString() + " 🐬");
 	});
 }
 
@@ -27,6 +47,10 @@ inline void PaimonOpenSSLVersionScalarFun(DataChunk &args, ExpressionState &stat
 }
 
 static void LoadInternal(ExtensionLoader &loader) {
+	auto &instance = loader.GetDatabaseInstance();
+	auto &config = DBConfig::GetConfig(instance);
+	config.storage_extensions["paimon"] = make_uniq<PaimonStorageExtension>();
+
 	// Register a scalar function
 	auto paimon_scalar_function =
 	    ScalarFunction("paimon", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PaimonScalarFun);

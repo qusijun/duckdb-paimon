@@ -48,9 +48,19 @@ release: prebuild-paimon-cpp prebuild-arrow-cpp
 	@echo "Building extension in release mode..."
 	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile release PROJ_DIR="$(CURDIR)/" EXT_CONFIG="$(PROJ_DIR)extension_config.cmake" EXT_NAME="$(EXT_NAME)"
 
-ifneq ($(EXTENSION_SQL_TEST_PATTERN),)
 test_release_internal:
-	./build/release/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"
+	@if [ -z "$(EXTENSION_SQL_TEST_PATTERN)" ]; then \
+		echo "Running default paimon tests: paimon.test and paimon_scan.test"; \
+		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon.test" && \
+		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_scan.test"; \
+	else \
+		./build/release/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"; \
+	fi
 test_debug_internal:
-	./build/debug/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"
-endif
+	@if [ -z "$(EXTENSION_SQL_TEST_PATTERN)" ]; then \
+		echo "Running default paimon tests: paimon.test and paimon_scan.test"; \
+		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon.test" && \
+		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_scan.test"; \
+	else \
+		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"; \
+	fi
