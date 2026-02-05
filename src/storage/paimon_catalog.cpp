@@ -2,8 +2,11 @@
 #include "arrow/status.h"
 #include "storage/paimon_catalog.hpp"
 #include "storage/paimon_schema_entry.hpp"
+#include "storage/paimon_table_entry.hpp"
+#include "paimon_insert.hpp"
 #include "paimon_storage_extension.hpp"
 #include "paimon/catalog/catalog.h"
+#include "duckdb/common/enums/on_create_conflict.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/storage/database_size.hpp"
@@ -11,6 +14,7 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/common/types/value.hpp"
+#include "duckdb/parser/statement/insert_statement.hpp"
 #include "storage/paimon_catalog_factory.hpp"
 
 #include <map>
@@ -104,7 +108,30 @@ optional_ptr<SchemaCatalogEntry> PaimonCatalog::LookupSchema(CatalogTransaction 
 }
 
 optional_ptr<CatalogEntry> PaimonCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
-	throw NotImplementedException("CREATE SCHEMA is not supported for Paimon catalog (read-only)");
+	paimon::Catalog *pc = paimon_catalog_.get();
+	if (!pc) {
+		throw CatalogException("Paimon catalog not initialized");
+	}
+
+	std::map<std::string, std::string> options = {
+	    {paimon::Options::FILE_SYSTEM, "local"},
+	    {paimon::Options::MANIFEST_FORMAT, "avro"},
+	};
+
+	bool ignore_if_exists = (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
+	auto status = pc->CreateDatabase(info.schema, options, ignore_if_exists);
+	if (!status.ok()) {
+		throw CatalogException("Failed to create Paimon database '%s': %s", info.schema.c_str(),
+		                       status.ToString().c_str());
+	}
+
+	CreateSchemaInfo schema_info;
+	schema_info.schema = info.schema;
+	schema_info.internal = info.internal;
+	auto schema_entry = make_uniq<PaimonSchemaEntry>(*this, schema_info);
+	std::lock_guard lock(schema_mutex_);
+	schema_entries_[info.schema] = std::move(schema_entry);
+	return schema_entries_[info.schema].get();
 }
 
 void PaimonCatalog::DropSchema(ClientContext &context, DropInfo &info) {
@@ -122,7 +149,27 @@ PhysicalOperator &PaimonCatalog::PlanCreateTableAs(ClientContext &context, Physi
 
 PhysicalOperator &PaimonCatalog::PlanInsert(ClientContext &context, PhysicalPlanGenerator &planner, LogicalInsert &op,
                                             optional_ptr<PhysicalOperator> plan) {
-	throw NotImplementedException("INSERT is not supported for Paimon catalog (read-only)");
+	auto &table = op.table;
+	auto *paimon_table = dynamic_cast<PaimonTableEntry *>(&table);
+	if (!paimon_table) {
+		throw InternalException("PlanInsert: expected PaimonTableEntry");
+	}
+
+	if (op.on_conflict_info.action_type != OnConflictAction::THROW) {
+		throw NotImplementedException("INSERT with ON CONFLICT is not supported for Paimon catalog");
+	}
+	if (op.return_chunk) {
+		throw NotImplementedException("INSERT ... RETURNING is not supported for Paimon catalog");
+	}
+
+	D_ASSERT(plan);
+	if (!op.column_index_map.empty()) {
+		plan = planner.ResolveDefaultsProjection(op, *plan);
+	}
+
+	auto &insert = planner.Make<PhysicalPaimonInsert>(op.types, *paimon_table, op.estimated_cardinality);
+	insert.children.push_back(*plan);
+	return insert;
 }
 
 PhysicalOperator &PaimonCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,

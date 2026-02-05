@@ -29,6 +29,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 set(EXTENSION_SOURCES
   src/paimon_extension.cpp
   src/paimon_functions.cpp
+  src/paimon_insert.cpp
   src/paimon_storage_extension.cpp
   src/storage/paimon_catalog.cpp
   src/storage/paimon_catalog_factory.cpp

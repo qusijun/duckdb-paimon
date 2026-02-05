@@ -7,9 +7,10 @@
 namespace duckdb {
 
 PaimonTableEntry::PaimonTableEntry(Catalog &catalog, SchemaCatalogEntry &schema, CreateTableInfo &info,
-                                   std::string table_path, shared_ptr<ArrowTableSchema> arrow_table)
+                                   std::string table_path, shared_ptr<ArrowTableSchema> arrow_table,
+                                   int32_t num_buckets)
     : TableCatalogEntry(catalog, schema, info), table_path_(std::move(table_path)),
-      arrow_table_(std::move(arrow_table)) {
+      arrow_table_(std::move(arrow_table)), num_buckets_(num_buckets) {
 }
 
 unique_ptr<BaseStatistics> PaimonTableEntry::GetStatistics(ClientContext &context, column_t column_id) {

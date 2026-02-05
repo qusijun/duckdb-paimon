@@ -1,0 +1,21 @@
+# name: test/sql/paimon_create_table.test
+# description: test Paimon CREATE TABLE and CREATE SCHEMA via SQL
+# group: [sql]
+
+require paimon
+
+# Attach writable warehouse (use test/data which has default.db, we'll create new schema)
+statement ok
+ATTACH 'test/data' AS pc (TYPE paimon);
+
+# Create a new schema (database)
+statement ok
+CREATE SCHEMA IF NOT EXISTS pc.myschema;
+
+# Create table without primary key (append-only)
+statement ok
+CREATE TABLE pc.myschema.append_table (a VARCHAR, b BIGINT);
+
+# Create table with primary key
+statement ok
+CREATE TABLE pc.myschema.pk_table (id BIGINT PRIMARY KEY, name VARCHAR);

@@ -1,16 +1,25 @@
 #include "arrow/status.h"
 #include "arrow/c/helpers.h"
 #include "storage/paimon_schema_entry.hpp"
+#include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "storage/paimon_catalog.hpp"
+#include "storage/paimon_table_entry.hpp"
 #include "paimon_functions.hpp"
+#include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
 #include "duckdb/parser/parsed_data/create_table_info.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/parser/column_definition.hpp"
+#include "duckdb/parser/constraints/unique_constraint.hpp"
 #include "duckdb/catalog/entry_lookup_info.hpp"
+#include "duckdb/common/enums/on_create_conflict.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "paimon/catalog/catalog.h"
 #include "paimon/catalog/identifier.h"
+#include "paimon/defs.h"
+#include "arrow/c/abi.h"
 
 namespace duckdb {
 
@@ -19,8 +28,106 @@ PaimonSchemaEntry::PaimonSchemaEntry(Catalog &catalog, CreateSchemaInfo &info) :
 
 PaimonSchemaEntry::~PaimonSchemaEntry() = default;
 
+static void ExtractPrimaryKeys(const CreateTableInfo &create_info, vector<string> &primary_keys) {
+	for (const auto &constraint : create_info.constraints) {
+		if (constraint->type != ConstraintType::UNIQUE) {
+			continue;
+		}
+		auto &unique_c = constraint->Cast<UniqueConstraint>();
+		if (!unique_c.IsPrimaryKey()) {
+			continue;
+		}
+		const auto &column_names = unique_c.GetColumnNames();
+		if (!column_names.empty()) {
+			for (const auto &cn : column_names) {
+				primary_keys.push_back(cn);
+			}
+		} else if (unique_c.HasIndex()) {
+			auto idx = unique_c.GetIndex();
+			if (idx.index < create_info.columns.LogicalColumnCount()) {
+				primary_keys.push_back(create_info.columns.GetColumn(LogicalIndex(idx.index)).Name());
+			}
+		}
+		break; // Only one primary key constraint
+	}
+}
+
 optional_ptr<CatalogEntry> PaimonSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
-	throw NotImplementedException("CREATE TABLE is not supported for Paimon catalog (read-only)");
+	auto &create_info = info.Base();
+	auto &paimon_catalog = catalog.Cast<PaimonCatalog>();
+	paimon::Catalog *pc = paimon_catalog.GetPaimonCatalog();
+
+	// Ensure database exists
+	std::map<std::string, std::string> db_options = {
+	    {paimon::Options::FILE_SYSTEM, "local"},
+	    {paimon::Options::MANIFEST_FORMAT, "avro"},
+	};
+	auto create_db_status = pc->CreateDatabase(name, db_options, /*ignore_if_exists=*/true);
+	if (!create_db_status.ok()) {
+		throw CatalogException("Failed to create Paimon database '%s': %s", name.c_str(),
+		                       create_db_status.ToString().c_str());
+	}
+
+	// Build column types and names (physical columns only, exclude generated)
+	vector<LogicalType> types;
+	vector<string> names;
+	for (const auto &col : create_info.columns.Physical()) {
+		if (col.Generated()) {
+			continue;
+		}
+		names.push_back(col.Name());
+		types.push_back(col.Type());
+	}
+	if (names.empty()) {
+		throw CatalogException("CREATE TABLE: table must have at least one column");
+	}
+
+	// Convert to Arrow schema
+	ArrowSchemaWrapper arrow_schema_wrapper;
+	auto &context = transaction.GetContext();
+	auto client_properties = context.GetClientProperties();
+	ArrowConverter::ToArrowSchema(&arrow_schema_wrapper.arrow_schema, types, names, client_properties);
+
+	// Extract primary keys
+	vector<string> primary_keys;
+	ExtractPrimaryKeys(create_info, primary_keys);
+
+	// Partition keys - not supported from DuckDB CREATE TABLE yet
+	std::vector<std::string> partition_keys;
+
+	// Table options
+	std::map<std::string, std::string> table_options = {
+	    {paimon::Options::FILE_SYSTEM, "local"},
+	    {paimon::Options::MANIFEST_FORMAT, "avro"},
+	    {paimon::Options::FILE_FORMAT, "parquet"},
+	};
+
+	// Primary key tables require bucket > 0 (fixed bucket mode); append-only tables use bucket -1
+	if (!primary_keys.empty()) {
+		table_options[paimon::Options::BUCKET] = "1";
+		// bucket-key defaults to primary key when not specified; set explicitly for clarity
+		table_options[paimon::Options::BUCKET_KEY] = StringUtil::Join(primary_keys, ",");
+	} else {
+		table_options[paimon::Options::BUCKET] = "-1";
+	}
+
+	bool ignore_if_exists = (create_info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT);
+	if (create_info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		throw NotImplementedException("CREATE OR REPLACE TABLE is not supported for Paimon catalog");
+	}
+
+	paimon::Identifier identifier(name, create_info.table);
+	auto create_table_status = pc->CreateTable(identifier, &arrow_schema_wrapper.arrow_schema, partition_keys,
+	                                           primary_keys, table_options, ignore_if_exists);
+	if (!create_table_status.ok()) {
+		throw CatalogException("Failed to create Paimon table '%s.%s': %s", name.c_str(), create_info.table.c_str(),
+		                       create_table_status.ToString().c_str());
+	}
+
+	// If ignore_if_exists and table already existed, we need to return the existing entry
+	// CreateTable with ignore_if_exists=true returns OK without creating - table may already exist
+	// Return the table entry (fetch it)
+	return GetTableEntry(context, create_info.table);
 }
 
 optional_ptr<CatalogEntry> PaimonSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info) {
@@ -135,6 +242,7 @@ optional_ptr<CatalogEntry> PaimonSchemaEntry::GetTableEntry(ClientContext &conte
 	shared_ptr<ArrowTableSchema> arrow_table =
 	    PaimonArrowTableSchemaFromArrowSchema(context, schema_wrapper.arrow_schema);
 	string table_path = paimon_catalog->GetTableLocation(identifier);
+	int32_t num_buckets = schema_result.value()->NumBuckets();
 
 	CreateTableInfo info;
 	info.catalog = catalog_paimon_wrapper.GetAttachName();
@@ -144,7 +252,8 @@ optional_ptr<CatalogEntry> PaimonSchemaEntry::GetTableEntry(ClientContext &conte
 		info.columns.AddColumn(ColumnDefinition(arrow_table->GetNames()[i], arrow_table->GetTypes()[i]));
 	}
 
-	auto table_entry = make_uniq<PaimonTableEntry>(catalog, *this, info, std::move(table_path), std::move(arrow_table));
+	auto table_entry =
+	    make_uniq<PaimonTableEntry>(catalog, *this, info, std::move(table_path), std::move(arrow_table), num_buckets);
 	std::lock_guard lock(table_mutex_);
 	table_entries_[table_name] = std::move(table_entry);
 	return table_entries_[table_name].get();

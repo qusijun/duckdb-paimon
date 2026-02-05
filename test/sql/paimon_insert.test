@@ -1,0 +1,23 @@
+# name: test/sql/paimon_insert.test
+# description: test Paimon INSERT into append-only tables
+# group: [sql]
+
+require paimon
+
+statement ok
+ATTACH 'test/data' AS pc (TYPE paimon);
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS pc.insert_schema;
+
+statement ok
+CREATE TABLE pc.insert_schema.append_tbl (a VARCHAR, b BIGINT);
+
+statement ok
+INSERT INTO pc.insert_schema.append_tbl VALUES ('x', 1), ('y', 2);
+
+query II
+SELECT * FROM pc.insert_schema.append_tbl ORDER BY 1, 2;
+----
+x	1
+y	2

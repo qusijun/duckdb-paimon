@@ -7,9 +7,7 @@
 #include "paimon/read_context.h"
 #include "paimon/table/source/table_read.h"
 #include "paimon/reader/batch_reader.h"
-#include "arrow/c/bridge.h"
 #include "arrow/c/helpers.h"
-#include "arrow/array.h"
 #include "duckdb/function/table/arrow.hpp"
 
 namespace duckdb {
