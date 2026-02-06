@@ -27,3 +27,6 @@ flink	3
 hello	1
 paimon	4
 world	2
+
+statement ok
+DETACH pc;

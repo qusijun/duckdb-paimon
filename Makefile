@@ -47,7 +47,8 @@ test_release_internal:
 		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon.test" && \
 		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_scan.test" && \
 		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_create_table.test" && \
-		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_insert.test"; \
+		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_insert.test" && \
+		./build/release/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_scan_predicate_pushdown.test"; \
 	else \
 		./build/release/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"; \
 	fi
@@ -57,7 +58,8 @@ test_debug_internal:
 		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon.test" && \
 		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_scan.test" && \
 		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_create_table.test" && \
-		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_insert.test"; \
+		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_insert.test" && \
+		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "test/sql/paimon_scan_predicate_pushdown.test"; \
 	else \
 		./build/debug/$(TEST_PATH) --require $(EXT_NAME) "$(EXTENSION_SQL_TEST_PATTERN)"; \
 	fi

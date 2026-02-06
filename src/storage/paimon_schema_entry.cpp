@@ -4,7 +4,7 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "storage/paimon_catalog.hpp"
 #include "storage/paimon_table_entry.hpp"
-#include "paimon_functions.hpp"
+#include "paimon_scan.hpp"
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "duckdb/main/client_context.hpp"

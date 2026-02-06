@@ -4,6 +4,7 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
+#include "duckdb/planner/table_filter.hpp"
 #include "paimon/api.h"
 #include "arrow/c/bridge.h"
 
@@ -13,6 +14,8 @@ namespace duckdb {
 struct PaimonScanBindData : FunctionData {
 	std::string table_path;
 	shared_ptr<ArrowTableSchema> arrow_table;
+	//! Optional filters pushed down from DuckDB (simple column predicates)
+	std::unique_ptr<TableFilterSet> filters;
 
 	PaimonScanBindData(std::string path, shared_ptr<ArrowTableSchema> arrow_table_p)
 	    : table_path(std::move(path)), arrow_table(std::move(arrow_table_p)) {
@@ -63,3 +66,4 @@ shared_ptr<ArrowTableSchema> PaimonArrowTableSchemaFromArrowSchema(ClientContext
                                                                    const ArrowSchema &arrow_schema);
 
 } // namespace duckdb
+

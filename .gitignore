@@ -9,3 +9,4 @@ test/python/__pycache__/
 .vscode
 output
 test/data/
+submodules/output/

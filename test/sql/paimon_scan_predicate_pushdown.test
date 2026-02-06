@@ -1,0 +1,40 @@
+# name: test/sql/paimon_scan_predicate_pushdown.test
+# description: test Paimon scan predicate pushdown via catalog tables
+# group: [sql]
+
+require paimon
+
+# Attach writable warehouse and create a dedicated schema/table in the Paimon catalog
+statement ok
+ATTACH 'test/data' AS pc (TYPE paimon);
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS pc.scan_predicate;
+
+statement ok
+CREATE TABLE pc.scan_predicate.append_tbl (k BIGINT, v VARCHAR);
+
+statement ok
+INSERT INTO pc.scan_predicate.append_tbl VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd');
+
+# Basic end-to-end scan sanity check (no predicates) via Paimon catalog
+query II
+SELECT * FROM pc.scan_predicate.append_tbl ORDER BY k;
+----
+1	a
+2	b
+3	c
+4	d
+
+# Predicate pushdown: simple equality on BIGINT
+query II
+SELECT v, k FROM pc.scan_predicate.append_tbl WHERE k = 2 ORDER BY v, k;
+----
+b	2
+
+# Predicate pushdown: IN list on BIGINT
+query II
+SELECT k, v FROM pc.scan_predicate.append_tbl WHERE k IN (1, 4) ORDER BY k;
+----
+1	a
+4	d
