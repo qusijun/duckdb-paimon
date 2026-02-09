@@ -2,7 +2,7 @@
 
 #include "arrow/status.h"
 #include "paimon_extension.hpp"
-#include "paimon_functions.hpp"
+#include "paimon_scan.hpp"
 #include "storage/paimon_catalog.hpp"
 #include "storage/paimon_transaction_manager.hpp"
 #include "duckdb.hpp"

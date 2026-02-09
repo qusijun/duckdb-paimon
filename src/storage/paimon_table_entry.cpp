@@ -1,7 +1,7 @@
 #include "arrow/status.h"
 #include "storage/paimon_table_entry.hpp"
 #include "storage/paimon_catalog.hpp"
-#include "paimon_functions.hpp"
+#include "paimon_scan.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
 
 namespace duckdb {
