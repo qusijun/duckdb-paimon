@@ -44,4 +44,3 @@ vector<column_t> PaimonTableEntry::GetRowIdColumns() const {
 }
 
 } // namespace duckdb
-

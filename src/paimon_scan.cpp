@@ -134,22 +134,23 @@ std::shared_ptr<paimon::Predicate> BuildPaimonPredicateForFilter(idx_t duck_col_
 		const auto &literal = *literal_opt;
 		switch (const_filter.comparison_type) {
 		case ExpressionType::COMPARE_EQUAL:
-			return paimon::PredicateBuilder::Equal(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type, literal);
+			return paimon::PredicateBuilder::Equal(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type,
+			                                       literal);
 		case ExpressionType::COMPARE_NOTEQUAL:
 			return paimon::PredicateBuilder::NotEqual(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type,
 			                                          literal);
 		case ExpressionType::COMPARE_LESSTHAN:
 			return paimon::PredicateBuilder::LessThan(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type,
-			                                         literal);
+			                                          literal);
 		case ExpressionType::COMPARE_LESSTHANOREQUALTO:
 			return paimon::PredicateBuilder::LessOrEqual(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type,
-			                                            literal);
+			                                             literal);
 		case ExpressionType::COMPARE_GREATERTHAN:
 			return paimon::PredicateBuilder::GreaterThan(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type,
-			                                            literal);
+			                                             literal);
 		case ExpressionType::COMPARE_GREATERTHANOREQUALTO:
 			return paimon::PredicateBuilder::GreaterOrEqual(NumericCast<int32_t>(duck_col_idx), field_name, paimon_type,
-			                                               literal);
+			                                                literal);
 		default:
 			return nullptr;
 		}
@@ -545,4 +546,3 @@ TableFunction PaimonFunctions::GetPaimonScanTableFunction() {
 }
 
 } // namespace duckdb
-

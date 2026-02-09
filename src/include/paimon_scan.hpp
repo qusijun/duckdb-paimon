@@ -66,4 +66,3 @@ shared_ptr<ArrowTableSchema> PaimonArrowTableSchemaFromArrowSchema(ClientContext
                                                                    const ArrowSchema &arrow_schema);
 
 } // namespace duckdb
-
