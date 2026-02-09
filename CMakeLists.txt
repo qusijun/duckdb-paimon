@@ -45,9 +45,20 @@ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 target_include_directories(${EXTENSION_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/include)
 
-# Link OpenSSL in both the static library as the loadable extension
-target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared paimon_parquet_file_format_shared paimon_orc_file_format_shared paimon_avro_file_format_shared paimon_local_file_system_shared)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared paimon_parquet_file_format_shared paimon_orc_file_format_shared paimon_avro_file_format_shared paimon_local_file_system_shared)
+# Link OpenSSL and Paimon libs in both the static library and the loadable extension.
+# In Release, force parquet/orc/avro/local_file_system .so to be direct DT_NEEDED (so ldd shows them).
+target_link_libraries(${EXTENSION_NAME}
+  OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared
+  $<$<CONFIG:Release>:-Wl,--no-as-needed>
+  paimon_parquet_file_format_shared paimon_orc_file_format_shared paimon_avro_file_format_shared paimon_local_file_system_shared
+  $<$<CONFIG:Release>:-Wl,--as-needed>
+)
+target_link_libraries(${LOADABLE_EXTENSION_NAME}
+  OpenSSL::SSL OpenSSL::Crypto arrow_shared paimon_shared
+  $<$<CONFIG:Release>:-Wl,--no-as-needed>
+  paimon_parquet_file_format_shared paimon_orc_file_format_shared paimon_avro_file_format_shared paimon_local_file_system_shared
+  $<$<CONFIG:Release>:-Wl,--as-needed>
+)
 
 install(
   TARGETS ${EXTENSION_NAME}
