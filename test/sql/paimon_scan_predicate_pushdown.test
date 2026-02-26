@@ -38,3 +38,16 @@ SELECT k, v FROM pc.scan_predicate.append_tbl WHERE k IN (1, 4) ORDER BY k;
 ----
 1	a
 4	d
+
+# Predicate pushdown: equality on VARCHAR (non-first column)
+query II
+SELECT k, v FROM pc.scan_predicate.append_tbl WHERE v = 'b' ORDER BY k;
+----
+2	b
+
+# Predicate pushdown: IN list on VARCHAR (non-first column)
+query II
+SELECT v, k FROM pc.scan_predicate.append_tbl WHERE v IN ('a', 'c') ORDER BY v;
+----
+a	1
+c	3

@@ -36,7 +36,7 @@ struct PaimonScanGlobalState final : GlobalTableFunctionState {
 	std::unique_ptr<paimon::TableRead> table_read;
 	std::unique_ptr<paimon::BatchReader> batch_reader;
 	std::vector<std::shared_ptr<paimon::Split>> splits;
-	std::vector<column_t> column_ids;  // Store column ids from TableFunctionInitInput
+	std::vector<column_t> column_ids; // Store column ids from TableFunctionInitInput
 	idx_t current_split_idx = 0;
 	bool done = false;
 	/// Total number of NextBatch() calls in this scan
