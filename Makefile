@@ -30,13 +30,14 @@ prebuild-arrow-cpp:
 
 include extension-ci-tools/makefiles/duckdb_extension.Makefile
 
-# Target-specific CMAKE_BUILD_TYPE so prebuild uses correct type (?= allows override)
-debug: CMAKE_BUILD_TYPE?=Debug
+# Target-specific CMAKE_BUILD_TYPE so prebuild uses correct type for paimon-cpp/arrow
+# Always force Debug/Release here so `make debug`/`make release` reliably rebuild submodules.
+debug: CMAKE_BUILD_TYPE=Debug
 debug: prebuild-paimon-cpp prebuild-arrow-cpp
 	@echo "Building extension in debug mode..."
 	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile debug PROJ_DIR="$(CURDIR)/" EXT_CONFIG="$(PROJ_DIR)extension_config.cmake" EXT_NAME="$(EXT_NAME)"
 
-release: CMAKE_BUILD_TYPE?=Release
+release: CMAKE_BUILD_TYPE=Release
 release: prebuild-paimon-cpp prebuild-arrow-cpp
 	@echo "Building extension in release mode..."
 	@$(MAKE) -f extension-ci-tools/makefiles/duckdb_extension.Makefile release PROJ_DIR="$(CURDIR)/" EXT_CONFIG="$(PROJ_DIR)extension_config.cmake" EXT_NAME="$(EXT_NAME)"

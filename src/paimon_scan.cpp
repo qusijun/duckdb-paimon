@@ -14,6 +14,7 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/planner/filter/constant_filter.hpp"
 #include "duckdb/planner/filter/in_filter.hpp"
+#include "duckdb/logging/logger.hpp"
 
 namespace duckdb {
 
@@ -182,8 +183,11 @@ std::shared_ptr<paimon::Predicate> BuildPaimonPredicateForFilter(idx_t duck_col_
 }
 
 // Build combined Paimon predicate (AND of per-column filters) from DuckDB TableFilterSet.
+// filters: already remapped by CreateTableFilterSet, indices are relative to output columns
+// column_ids: maps output column indices to source column indices (for projection)
 std::shared_ptr<paimon::Predicate> BuildPaimonPredicateFromFilters(const PaimonScanBindData &bind_data,
-                                                                   optional_ptr<TableFilterSet> filters) {
+                                                                   optional_ptr<TableFilterSet> filters,
+                                                                   const vector<column_t> &column_ids) {
 	if (!filters || filters->filters.empty()) {
 		return nullptr;
 	}
@@ -195,16 +199,26 @@ std::shared_ptr<paimon::Predicate> BuildPaimonPredicateFromFilters(const PaimonS
 	predicates.reserve(filters->filters.size());
 
 	for (auto &entry : filters->filters) {
-		auto duck_col_idx = entry.first;
-		if (duck_col_idx >= names.size() || duck_col_idx >= types.size()) {
+		// entry.first is already remapped by CreateTableFilterSet to be relative to output columns
+		idx_t output_col_idx = entry.first;
+
+		// Map output column index to source column index using column_ids
+		if (output_col_idx >= column_ids.size()) {
 			continue;
 		}
-		const auto &field_name = names[duck_col_idx];
-		const auto &field_type = types[duck_col_idx];
+		idx_t source_col_idx = column_ids[output_col_idx];
+
+		if (source_col_idx >= names.size() || source_col_idx >= types.size()) {
+			continue;
+		}
+
+		const auto &field_name = names[source_col_idx];
+		const auto &field_type = types[source_col_idx];
 		auto &filter = *entry.second;
 
-		auto pred = BuildPaimonPredicateForFilter(duck_col_idx, field_name, field_type, filter);
+		auto pred = BuildPaimonPredicateForFilter(source_col_idx, field_name, field_type, filter);
 		if (pred) {
+
 			predicates.push_back(std::move(pred));
 		}
 	}
@@ -276,10 +290,20 @@ unique_ptr<GlobalTableFunctionState> PaimonScanInit(ClientContext &context, Tabl
 	auto &bind_data = input.bind_data->CastNoConst<PaimonScanBindData>();
 	auto result = make_uniq<PaimonScanGlobalState>();
 
+	// Store column_ids in global state
+	result->column_ids.reserve(input.column_ids.size());
+	for (auto col_id : input.column_ids) {
+		result->column_ids.emplace_back(col_id);
+	}
+
 	std::vector<std::shared_ptr<paimon::Split>> splits {};
 
 	// Build Paimon predicate from DuckDB table filters for file index & format-level pushdown.
-	std::shared_ptr<paimon::Predicate> paimon_predicate = BuildPaimonPredicateFromFilters(bind_data, input.filters);
+	std::shared_ptr<paimon::Predicate> paimon_predicate =
+	    BuildPaimonPredicateFromFilters(bind_data, input.filters, input.column_ids);
+	if (paimon_predicate) {
+		DUCKDB_LOG_DEBUG(context, "paimon_predicate: %s", paimon_predicate->ToString().c_str());
+	}
 	// Keep a copy of filters so we can enforce them on the output chunks for full correctness.
 	if (input.filters) {
 		auto copied_filters = input.filters->Copy();
@@ -291,6 +315,8 @@ unique_ptr<GlobalTableFunctionState> PaimonScanInit(ClientContext &context, Tabl
 	    {paimon::Options::MANIFEST_FORMAT, "avro"},
 	    // Ensure file index is enabled for scan planning.
 	    {paimon::Options::FILE_INDEX_READ_ENABLED, "true"},
+	    // Set smaller split target size to create more splits for parallel processing
+	    {paimon::Options::SOURCE_SPLIT_TARGET_SIZE, "16MB"},
 	};
 	paimon::ScanContextBuilder scan_context_builder(bind_data.table_path);
 	scan_context_builder.SetOptions(scan_options);
@@ -320,6 +346,8 @@ unique_ptr<GlobalTableFunctionState> PaimonScanInit(ClientContext &context, Tabl
 	std::map<std::string, std::string> options = {
 	    {paimon::Options::FILE_SYSTEM, "local"},
 	    {paimon::Options::FILE_INDEX_READ_ENABLED, "true"},
+	    // Set a larger read batch size to avoid returning only 1024 rows per batch
+	    {paimon::Options::READ_BATCH_SIZE, "65536"},
 	};
 	paimon::ReadContextBuilder read_context_builder(bind_data.table_path);
 	read_context_builder.SetOptions(options);
@@ -346,6 +374,7 @@ unique_ptr<GlobalTableFunctionState> PaimonScanInit(ClientContext &context, Tabl
 	result->batch_reader = std::move(reader_result).value();
 	result->splits = std::move(splits);
 
+	DUCKDB_LOG_INFO(context, "[paimon_scan] reader created: %zu split(s)", result->splits.size());
 	return result;
 }
 
@@ -362,16 +391,23 @@ void PaimonScanFunction(ClientContext &context, TableFunctionInput &data_p, Data
 	auto &state = data_p.local_state->Cast<PaimonScanLocalState>();
 	auto &global_state = data_p.global_state->Cast<PaimonScanGlobalState>();
 	if (global_state.done) {
+		DUCKDB_LOG_DEBUG(context, "[paimon_scan] reader finished: next_batch_call_count=%llu total_rows_read=%llu",
+		                 static_cast<unsigned long long>(global_state.next_batch_call_count),
+		                 static_cast<unsigned long long>(global_state.total_rows_read));
 		return;
 	}
 	if (!state.current_batch || state.chunk_offset >= static_cast<idx_t>(state.current_batch->arrow_array.length) ||
 	    !state.current_batch->arrow_array.release) {
 		// Get next batch
 		if (!global_state.batch_reader) {
+			DUCKDB_LOG_DEBUG(context, "[paimon_scan] reader finished: next_batch_call_count=%llu total_rows_read=%llu",
+			                 static_cast<unsigned long long>(global_state.next_batch_call_count),
+			                 static_cast<unsigned long long>(global_state.total_rows_read));
 			global_state.done = true;
 			return;
 		}
 
+		global_state.next_batch_call_count++;
 		auto batch_result = global_state.batch_reader->NextBatch();
 		if (!batch_result.ok()) {
 			throw InvalidInputException("Failed to read batch: " + batch_result.status().ToString());
@@ -379,9 +415,14 @@ void PaimonScanFunction(ClientContext &context, TableFunctionInput &data_p, Data
 		auto batch = std::move(batch_result).value();
 
 		if (paimon::BatchReader::IsEofBatch(batch)) {
+			DUCKDB_LOG_DEBUG(context, "[paimon_scan] reader finished: next_batch_call_count=%llu total_rows_read=%llu",
+			                 static_cast<unsigned long long>(global_state.next_batch_call_count),
+			                 static_cast<unsigned long long>(global_state.total_rows_read));
 			global_state.done = true;
 			return;
 		}
+
+		global_state.total_rows_read += static_cast<idx_t>(batch.first->length);
 
 		// Release old batch if exists
 		state.current_batch.reset();
@@ -463,12 +504,13 @@ void PaimonScanFunction(ClientContext &context, TableFunctionInput &data_p, Data
 
 	// Apply DuckDB filters (TableFilterSet) on the produced chunk for full correctness.
 	if (bind_data.filters && !bind_data.filters->filters.empty() && output.size() > 0) {
+		const auto &column_ids = global_state.column_ids;
 		SelectionVector sel(STANDARD_VECTOR_SIZE);
 		idx_t sel_count = 0;
 		for (idx_t row_idx = 0; row_idx < output.size(); row_idx++) {
 			bool keep = true;
 			for (auto &entry : bind_data.filters->filters) {
-				auto col_idx = entry.first;
+				auto col_idx = column_ids[entry.first];
 				if (col_idx >= output.ColumnCount()) {
 					continue;
 				}
